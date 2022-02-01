@@ -1,8 +1,8 @@
 /********************************/
 // includes
-#include <Wire.h> 
-#include <LiquidCrystal_I2C.h>
+#include <Wire.h>
 #include <Adafruit_MAX31856.h>
+#include <LiquidCrystal_I2C.h>
 #include <string.h>
 /*********************************************************/
 
@@ -25,17 +25,6 @@ Adafruit_MAX31856 maxthermo = Adafruit_MAX31856(10, 11, 12, 13);
 int OVEN_ELEMENT_PIN = 8;
 
 
-// variables for tracking the state of the running profile
-boolean reflowStarted = false;
-boolean coolDownStarted = false;
-boolean profileStarted = false;
-boolean profileStopped = false;
-
-
-long startMillis = 0;
-boolean ovenOn = false;
-float temp = 0;
-float lastTemp = 0;
 
 // variables for getting data from the keypad input device
 volatile char inputString[3];
@@ -43,8 +32,22 @@ volatile boolean inputAvailable = false;
 volatile int inputPos = 0;
 
 
-// another, redundant, set of variables for managing the running profiles. Delete all or most of these when merging
-// in the gold "temperature control" code from the other project. 
+// variables for tracking the state of the running profile
+boolean reflowStarted = false;
+boolean coolDownStarted = false;
+boolean profileStarted = false;
+boolean profileStopped = false;
+
+long startMillis = 0;
+boolean ovenOn = false;
+float temp = 0;
+float lastTemp = 0;
+
+
+
+
+// another, redundant, set of variables for managing the running profiles. Delete all or
+// most of these when merging in the gold "temperature control" code from the other project.
 
 long profileStartTime = -1;
 int activeProfile = -1;
@@ -204,16 +207,50 @@ void setup()
   Serial.println( "Backlight enabled" );
   
   lcd.setCursor ( 0, 0 );            // go to the top left corner
-  lcd.print(" Hello, EEVBlog!    "); // write this string on the top row
+  lcd.print(" Hello, Reflow User    "); // write this string on the top row
   lcd.setCursor ( 0, 1 );            // go to the 2nd row
-  lcd.print("BUY SOME TEST GEAR");   // pad string with spaces for centering
+  lcd.print("Enter control code now");   // pad string with spaces for centering
   lcd.setCursor ( 0, 2 );            // go to the third row
-  lcd.print("NOW, OR ELSE!!!"); // pad with spaces for centering
+  lcd.print("* to terminate"); // pad with spaces for centering
   lcd.setCursor ( 0, 3 );            // go to the fourth row
-  lcd.print("    @mindcrime   ");
+  lcd.print("Code 99 to terminate active run");
 
   Serial.println( "Hello World message written to LCD" );
-  
+
+  // initialize digital pin LED_BUILTIN as an output.
+  pinMode(OVEN_ELEMENT_PIN, OUTPUT);
+
+  Serial.begin(115200);
+  while (!Serial) delay(10);
+  Serial.println("MAX31856 thermocouple test");
+
+  pinMode(DRDY_PIN, INPUT);
+
+  if (!maxthermo.begin()) {
+    Serial.println("Could not initialize thermocouple.");
+    while (1) delay(10);
+  }
+
+  maxthermo.setThermocoupleType(MAX31856_TCTYPE_K);
+
+  Serial.print("Thermocouple type: ");
+  switch (maxthermo.getThermocoupleType() ) {
+    case MAX31856_TCTYPE_B: Serial.println("B Type"); break;
+    case MAX31856_TCTYPE_E: Serial.println("E Type"); break;
+    case MAX31856_TCTYPE_J: Serial.println("J Type"); break;
+    case MAX31856_TCTYPE_K: Serial.println("K Type"); break;
+    case MAX31856_TCTYPE_N: Serial.println("N Type"); break;
+    case MAX31856_TCTYPE_R: Serial.println("R Type"); break;
+    case MAX31856_TCTYPE_S: Serial.println("S Type"); break;
+    case MAX31856_TCTYPE_T: Serial.println("T Type"); break;
+    case MAX31856_VMODE_G8: Serial.println("Voltage x8 Gain mode"); break;
+    case MAX31856_VMODE_G32: Serial.println("Voltage x8 Gain mode"); break;
+    default: Serial.println("Unknown"); break;
+  }
+
+  maxthermo.setConversionMode(MAX31856_CONTINUOUS);
+
+
 }
 
 /*********************************************************/
@@ -255,6 +292,9 @@ void loop()
           // otherwise, ignore     
           break;
       }
+
+
+
   
   }
 
