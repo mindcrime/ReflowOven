@@ -13,7 +13,7 @@ project individually. So there's code for working out how to read input from the
 with the I2C LCD display, code for reading the thermocouple, etc.  Then there are pieces that start assembling the
 small experimental pieces into larger chunks of the overall system, and so on and so on.
 
-The "final" version that someone would use if they wanted to build an identical oven controller and actaully run
+The "final" version that someone would use if they wanted to build an identical oven controller and actually run
 this code is in the folder labeled "Oven_Control_with_LCD_combined".
 
 Further note: as of 12-31-2022 the "final" code isn't quite finished, but all of the individual pieces have been
