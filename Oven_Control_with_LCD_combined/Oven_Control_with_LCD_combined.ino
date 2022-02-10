@@ -43,14 +43,14 @@ boolean ovenOn = false;
 float temp = 0;
 float lastTemp = 0;
 
-
+int activeProfile = -1;
 
 
 // another, redundant, set of variables for managing the running profiles. Delete all or
 // most of these when merging in the gold "temperature control" code from the other project.
 
 long profileStartTime = -1;
-int activeProfile = -1;
+// int activeProfile = -1;
 boolean profileRunning = false;
 boolean abortRun = false;
 
@@ -285,34 +285,164 @@ void loop()
       switch( command )
       {
         case 99:
-          // abort
+          // TODO: set abort flag
+          profileStopped = true;
           break;
        default:
           // set activeProfile to the supplied value, if activeProfile is currently empty
-          // otherwise, ignore     
+          // otherwise, ignore
+    	  if( activeProfile == -1 )
+    	  {
+    		  activeProfile = command;
+    	  }
+    	  else
+    	  {
+    		  // NOP
+    	  }
           break;
       }
-
-
-
-  
   }
 
-  // check if a profile is already running. If not, do nothing but wait a little while
-  
-  /* 
-    long profileStartTime = -1;
-    int activeProfile = -1;
-    boolean profileRunning = false;
-    boolean abortRun = false;
-  */
+  // TODO: right now the profile details are hard-coded into the code below. Need to
+  // modify this to use the profile parameters from the Profile data structure, for the
+  // profile selected by the user.
 
-  // if a profile IS running, check the desired temperature at the current time-step and then check the
-  // temperature from the thermocouple. Take any required action to account for a delta between the two values.
-  // also, update the LCD with the current oven temperature and the elapsed time since the profile started.
-  
-  
-  
-  //   delay( 250 );
+
+  // TODO LATER: implement actual PID (or at least PI) control algorithm
+
+
+  if( profileStopped )
+  {
+    delay(5000);
+    return;
+  }
+
+  // The DRDY output goes low when a new conversion result is available
+  int count = 0;
+  while (digitalRead(DRDY_PIN)) {
+    if (count++ > 200) {
+      count = 0;
+      // Serial.print(".");
+    }
+  }
+
+  lastTemp = temp;
+  temp = maxthermo.readThermocoupleTemperature();
+
+  if( temp > 230.0 )
+  {
+    // ABORT, ABORT!!!!
+    Serial.print( "TEMP: " ); Serial.print( temp ); Serial.println( " - MAX TEMP EXCEEDED. ABORT, ABORT!!!" );
+    digitalWrite(OVEN_ELEMENT_PIN, LOW);   // turn the oven OFF
+    delay( 240000 );
+    return;
+  }
+
+  if( !profileStarted && !profileStopped )
+  {
+    profileStarted = true;
+    // turn oven on
+    startMillis = millis();
+
+  }
+  else if( profileStarted )
+  {
+
+    long elapsedMillis = millis() - startMillis;
+    Serial.print( elapsedMillis/1000 ); Serial.print( "," ); Serial.println( temp );
+
+    if( temp < 148.0 && (elapsedMillis / 1000) < 150 )
+    {
+      // PREHEAT: come up to 150 degrees, max of 2.5 minutes (150 seconds)
+      if( !ovenOn )
+      {
+        // we're in the preheat phase, leave the oven ON
+        Serial.println( "PREHEAT: Turning oven ON" );
+        digitalWrite(OVEN_ELEMENT_PIN, HIGH);   // turn the oven ON
+        ovenOn = true;
+      }
+
+    }
+    else if( temp > 148 || (elapsedMillis / 1000) > 150 )
+    {
+
+        if( temp < 178 && (elapsedMillis / 1000) < 240 && !reflowStarted )
+        {
+
+            // SOAK: come up to 178, max of 4 minutes (combined with PREHEAT)
+            if( ovenOn )
+            {
+              Serial.println( "SOAK: Turning oven OFF" );
+              digitalWrite(OVEN_ELEMENT_PIN, LOW);   // turn the oven OFF
+              // turn the oven completely OFF for this phase. We'll see how close that gets us relying on thermal interia
+              ovenOn = false;
+            }
+
+            if( temp <= lastTemp ) // if we've let the temperature drop at all
+            {
+              // give it a little bump
+              Serial.println( "SOAK: Turning oven ON" );
+              digitalWrite(OVEN_ELEMENT_PIN, HIGH);   // turn the oven ON
+              delay( 5000 ); // a little 5 second blast of heat
+              Serial.println( "SOAK: Turning oven OFF" );
+              digitalWrite(OVEN_ELEMENT_PIN, LOW);   // turn the oven OFF
+            }
+        }
+        else if( temp > 178 || (elapsedMillis / 1000 ) > 240  )
+        {
+
+            if ( temp < 220 && (elapsedMillis / 1000) < 315 && !coolDownStarted )
+            {
+              // REFLOW: come up to 220, max of 75 seconds
+              if( !ovenOn )
+              {
+                Serial.println( "REFLOW: Turning oven ON" );
+                digitalWrite(OVEN_ELEMENT_PIN, HIGH);   // turn the oven ON
+                // turn the oven ON for this phase
+                ovenOn = true;
+                reflowStarted = true;
+              }
+
+            }
+            else if( temp > 220 || (elapsedMillis / 1000) > 315 )
+            {
+              if( (elapsedMillis / 1000) < 435 )
+              {
+                  // to prevent the oven from going back into REFLOW once COOLDOWN has started
+                  coolDownStarted = true;
+
+                  // COOLDOWN: turn off heat, come down to room temp
+                  if( ovenOn )
+                  {
+                    Serial.println( "COOLDOWN: Turning oven OFF" );
+                    digitalWrite(OVEN_ELEMENT_PIN, LOW);   // turn the oven OFF
+                    // turn the oven OFF for this phase
+                    // and, once we implement the door control, open the door
+                    // also, set off the alert buzzer here
+                    ovenOn = false;
+                  }
+              }
+              else if( (elapsedMillis / 1000) > 435 )
+              {
+                // sanity check that the oven is off
+                Serial.println( "FINALIZER: Turning oven OFF" );
+                digitalWrite(OVEN_ELEMENT_PIN, LOW);   // turn the oven OFF
+
+                profileStopped = true; // set to TRUE so we don't do anything else until receiving an
+                                       // explicit "start profile" command
+
+
+                // set other values back to their default state to get ready for the next run
+                profileStarted = false;
+                reflowStarted = false;
+                ovenOn = false;
+                coolDownStarted = false;
+              }
+           }
+        }
+     }
+  }
+
+  delay( 2000 );
+
 }
-/************************************************************/
